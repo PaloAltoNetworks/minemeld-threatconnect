@@ -18,7 +18,7 @@ prototypes:
     config:
       apikey: <API_KEY>
       apisecret: <API_SECRET>
-      owner: Technical Blogs and Reports
+      owner: <OWNER>
       initial_interval: 120
       sandbox: true
       interval: 3600
