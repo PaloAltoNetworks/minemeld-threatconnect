@@ -9,7 +9,7 @@
       "threatconnect.Miner": "threatconnect.node:Miner"
     },
     "minemeld_prototypes": {
-      "wildcardipminer.prototypes": "wildcardipminer:prototypes"
+      "threatconnect.prototypes": "threatconnect:prototypes"
     }
   },
   "manifest_version": 0
