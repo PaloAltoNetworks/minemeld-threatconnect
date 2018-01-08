@@ -148,6 +148,16 @@ class Miner(BasePollerFT):
         return []
 
     def _build_iterator(self, now):
+        if self.api_key is None:
+            raise RuntimeError(
+                '{} - API Key not set, '
+                'poll not performed'.format(self.name)
+            )
+        if self.api_secret is None:
+            raise RuntimeError(
+                '{} - API Secret not set, '
+                'poll not performed'.format(self.name)
+            )
         for a in IP_INDICATOR_MAP:
             indicator_list = a.get("indicator", None)
             if indicator_list is None:
