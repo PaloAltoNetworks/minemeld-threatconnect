@@ -5,10 +5,14 @@ import base64
 import time
 import requests
 import datetime
+import pytz
+import os
+import yaml
 
 from netaddr import IPNetwork, AddrFormatError
 from urllib import quote
 from minemeld.ft.basepoller import BasePollerFT
+from minemeld.ft.utils import utc_millisec
 
 LOG = logging.getLogger(__name__)
 GENERIC_INDICATOR_MAP = [
@@ -32,10 +36,10 @@ class Miner(BasePollerFT):
     api_url = None
     api_base_uri = None
     signature = None
-    indicator_map = []
-    timestamp = 0.0
     api_timestamp = None
+    initial_interval = None
     owner = None
+    side_config_path = None
 
     def configure(self):
         super(Miner, self).configure()
@@ -50,8 +54,28 @@ class Miner(BasePollerFT):
             self.api_base_uri = '/v2/indicators/'
         data_owner = self.config.get('owner', None)
         self.owner = None if data_owner is None else quote(data_owner)
-        initial_interval = self.config.get('initial_interval', 30)
-        self.timestamp = (time.time() - initial_interval * 86400.0)
+        self.initial_interval = self.config.get('initial_interval', 30)
+        self.side_config_path = self.config.get('side_config', None)
+        if self.side_config_path is None:
+            self.side_config_path = os.path.join(
+                os.environ['MM_CONFIG_DIR'],
+                '%s_side_config.yml' % self.name
+            )
+        self._load_side_config()
+
+    def _load_side_config(self):
+        try:
+            with open(self.side_config_path, 'r') as f:
+                sconfig = yaml.safe_load(f)
+
+        except Exception as e:
+            LOG.error('%s - Error loading side config: %s', self.name, str(e))
+            return
+
+        self.api_key = sconfig.get('apikey', None)
+        self.api_secret = sconfig.get('apisecret', None)
+        data_owner = sconfig.get('owner', None)
+        self.owner = None if data_owner is None else quote(data_owner)
 
     def _prepare_get(self, uri):
         self.api_timestamp = str(int(time.time()))
@@ -117,10 +141,11 @@ class Miner(BasePollerFT):
         return result
 
     def _paginate_request(self, entry_point, entity):
+        isotime = datetime.datetime.fromtimestamp(self.last_successful_run / 1000).replace(tzinfo=pytz.utc).isoformat()
+
         def do_call(start):
-            modified_time = datetime.datetime.fromtimestamp(self.timestamp)
             api_request = entry_point + '?modifiedSince={}&resultStart={}&resultLimit=100'.format(
-                modified_time.isoformat(), start)
+                isotime, start)
             if self.owner is not None:
                 api_request += '&owner={}'.format(self.owner)
             self._prepare_get(api_request)
@@ -147,17 +172,7 @@ class Miner(BasePollerFT):
             return self._general_processing(item[1], item[2])
         return []
 
-    def _build_iterator(self, now):
-        if self.api_key is None:
-            raise RuntimeError(
-                '{} - API Key not set, '
-                'poll not performed'.format(self.name)
-            )
-        if self.api_secret is None:
-            raise RuntimeError(
-                '{} - API Secret not set, '
-                'poll not performed'.format(self.name)
-            )
+    def _main_iterator(self):
         for a in IP_INDICATOR_MAP:
             indicator_list = a.get("indicator", None)
             if indicator_list is None:
@@ -172,4 +187,18 @@ class Miner(BasePollerFT):
             for item in self._paginate_request(self.api_base_uri + a["apiBranch"], a["apiEntity"]):
                 yield ("GENERAL", item, indicator_map)
 
-        self.timestamp = now / 1000
+    def _build_iterator(self, now):
+        if self.api_key is None:
+            raise RuntimeError(
+                '{} - API Key not set, '
+                'poll not performed'.format(self.name)
+            )
+        if self.api_secret is None:
+            raise RuntimeError(
+                '{} - API Secret not set, '
+                'poll not performed'.format(self.name)
+            )
+        if self.last_successful_run is None:
+            self.last_successful_run = utc_millisec() - self.initial_interval * 86400000.0
+
+        return self._main_iterator()
