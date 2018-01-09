@@ -89,6 +89,29 @@ class Miner(BasePollerFT):
         self.signature
         return r
 
+    def hup(self, source=None):
+        LOG.info('%s - hup received, reload side config', self.name)
+        self._load_side_config()
+        super(Miner, self).hup(source=source)
+
+    @staticmethod
+    def gc(name, config=None):
+        BasePollerFT.gc(name, config=config)
+
+        side_config_path = None
+        if config is not None:
+            side_config_path = config.get('side_config', None)
+        if side_config_path is None:
+            side_config_path = os.path.join(
+                os.environ['MM_CONFIG_DIR'],
+                '{}_side_config.yml'.format(name)
+            )
+
+        try:
+            os.remove(side_config_path)
+        finally:
+            pass
+
     def _detect_ip_version(self, ip_addr):
         try:
             parsed = IPNetwork(ip_addr)
