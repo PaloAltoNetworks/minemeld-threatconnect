@@ -246,6 +246,7 @@ class Miner(BasePollerFT):
             )
         if self.last_successful_run is None:
             self.last_successful_run = utc_millisec() - self.initial_interval * 86400000.0
+        if self.last_tc_run is None:
             self.last_tc_run = self.last_successful_run
 
         return self._main_iterator()
