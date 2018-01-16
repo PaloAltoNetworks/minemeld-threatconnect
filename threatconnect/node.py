@@ -4,7 +4,6 @@ import hashlib
 import base64
 import time
 import requests
-import datetime
 import pytz
 import os
 import yaml
@@ -12,7 +11,8 @@ import yaml
 from netaddr import IPNetwork, AddrFormatError
 from urllib import quote
 from minemeld.ft.basepoller import BasePollerFT
-from minemeld.ft.utils import utc_millisec
+from minemeld.ft.utils import utc_millisec, dt_to_millisec
+from datetime import datetime
 
 LOG = logging.getLogger(__name__)
 GENERIC_INDICATOR_MAP = [
@@ -38,6 +38,7 @@ class Miner(BasePollerFT):
     signature = None
     api_timestamp = None
     initial_interval = None
+    last_tc_run = None
     owner = None
     side_config_path = None
 
@@ -77,6 +78,20 @@ class Miner(BasePollerFT):
         data_owner = sconfig.get('owner', None)
         self.owner = None if data_owner is None else quote(data_owner)
 
+    def _saved_state_restore(self, saved_state):
+        super(Miner, self)._saved_state_restore(saved_state)
+        self.last_tc_run = saved_state.get('last_tc_run', None)
+        LOG.info('last_tc_run from sstate: %s', self.last_tc_run)
+
+    def _saved_state_create(self):
+        sstate = super(Miner, self)._saved_state_create()
+        sstate['last_tc_run'] = self.last_tc_run
+        return sstate
+
+    def _saved_state_reset(self):
+        super(Miner, self)._saved_state_reset()
+        self.last_tc_run = None
+
     def _prepare_get(self, uri):
         self.api_timestamp = str(int(time.time()))
         message = '{}:GET:{}'.format(uri, self.api_timestamp)
@@ -86,7 +101,6 @@ class Miner(BasePollerFT):
     def __call__(self, r):
         r.headers['Authorization'] = self.signature
         r.headers['Timestamp'] = self.api_timestamp
-        self.signature
         return r
 
     def hup(self, source=None):
@@ -127,13 +141,13 @@ class Miner(BasePollerFT):
 
         return None
 
-    def _general_processing(self, item, indicator_map):
+    def _general_processing(self, item, indicator_map, f_seen, l_seen):
         result = []
         for tc_indicator, mm_indicator in indicator_map.iteritems():
             indicator = item.get(tc_indicator, None)
             if indicator is None:
                 continue
-            attributes = {'type': mm_indicator}
+            attributes = {'type': mm_indicator, 'first_seen': f_seen, 'last_seen': l_seen}
             confidence = item.get('threatAssessConfidence', None)
             if confidence is not None:
                 attributes['confidence'] = int(confidence)
@@ -147,7 +161,7 @@ class Miner(BasePollerFT):
             result.append([indicator, attributes])
         return result
 
-    def _ip_processing(self, item, indicator_list):
+    def _ip_processing(self, item, indicator_list, f_seen, l_seen):
         result = []
         for tc_indicator in indicator_list:
             indicator = item.get(tc_indicator, None)
@@ -156,7 +170,7 @@ class Miner(BasePollerFT):
             ip_type = self._detect_ip_version(indicator)
             if ip_type is None:
                 continue
-            attributes = {'type': ip_type}
+            attributes = {'type': ip_type, 'first_seen': f_seen, 'last_seen': l_seen}
             confidence = item.get('threatAssessConfidence', None)
             if confidence is not None:
                 attributes['confidence'] = int(confidence)
@@ -164,7 +178,7 @@ class Miner(BasePollerFT):
         return result
 
     def _paginate_request(self, entry_point, entity):
-        isotime = datetime.datetime.fromtimestamp(self.last_successful_run / 1000).replace(tzinfo=pytz.utc).isoformat()
+        isotime = datetime.fromtimestamp(self.last_tc_run / 1000).replace(tzinfo=pytz.utc).isoformat()
 
         def do_call(start):
             api_request = entry_point + '?modifiedSince={}&resultStart={}&resultLimit=100'.format(
@@ -173,7 +187,8 @@ class Miner(BasePollerFT):
                 api_request += '&owner={}'.format(self.owner)
             self._prepare_get(api_request)
             final_url = self.api_url + api_request
-            return requests.get(final_url, auth=self)
+            response = requests.get(final_url, auth=self)
+            return response
 
         r = do_call(0)
         r_data = r.json()
@@ -189,10 +204,18 @@ class Miner(BasePollerFT):
             r_data = do_call(pointer).json()
 
     def _process_item(self, item):
+        tc_date_added = item[1].get('dateAdded', None)
+        tc_last_modified = item[1].get('lastModified', None)
+        f_seen = utc_millisec() if tc_date_added is None else dt_to_millisec(
+            datetime.strptime(tc_date_added, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=pytz.utc))
+        l_seen = utc_millisec() if tc_last_modified is None else dt_to_millisec(
+            datetime.strptime(tc_last_modified, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=pytz.utc))
+        if l_seen > self.last_tc_run:
+            self.last_tc_run = l_seen
         if item[0] == "IP":
-            return self._ip_processing(item[1], item[2])
+            return self._ip_processing(item[1], item[2], f_seen, l_seen)
         if item[0] == "GENERAL":
-            return self._general_processing(item[1], item[2])
+            return self._general_processing(item[1], item[2], f_seen, l_seen)
         return []
 
     def _main_iterator(self):
@@ -223,5 +246,6 @@ class Miner(BasePollerFT):
             )
         if self.last_successful_run is None:
             self.last_successful_run = utc_millisec() - self.initial_interval * 86400000.0
+            self.last_tc_run = self.last_successful_run
 
         return self._main_iterator()

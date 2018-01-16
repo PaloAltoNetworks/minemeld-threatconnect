@@ -19,14 +19,14 @@ prototypes:
       apikey: <API_KEY>
       apisecret: <API_SECRET>
       owner: <OWNER>
-      initial_interval: 120
+      initial_interval: 60
       sandbox: true
       interval: 3600
       # age out of indicators
       age_out:
         sudden_death: false
         interval: 3600
-        default: null
+        default: last_seen+60d
       # flag indicators with share level green
       attributes:
         share_level: green
