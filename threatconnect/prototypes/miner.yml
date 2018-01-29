@@ -3,9 +3,9 @@ description: >
   ThreatConnect provides Threat Intelligence, Analytics, and Orchestration in One Platform
 
 prototypes:
-  threatconnect:
+  threatconnect_indicators:
     author: Palo Alto Networks TBD
-    class: threatconnect.Miner
+    class: threatconnect.IndicatorsMiner
     development_status: EXPERIMENTAL
     node_type: miner
     indicator_types:
@@ -27,6 +27,50 @@ prototypes:
         sudden_death: false
         interval: 3600
         default: last_seen+60d
+      # flag indicators with share level green
+      attributes:
+        share_level: green
+  threatconnect_groups:
+    author: Palo Alto Networks TBD
+    class: threatconnect.GroupsMiner
+    development_status: EXPERIMENTAL
+    node_type: miner
+    indicator_types:
+      - any
+    tags:
+      - extension
+      - threatconnect
+    description: >
+      example prototype for threatconnect.Miner.
+    config:
+      apikey: <API_KEY>
+      apisecret: <API_SECRET>
+      owner: <OWNER>
+      groups:
+        incidents:
+          - 1904505
+          - 1904504
+          - 1904493
+          - 1863629
+          - 1863615
+          - 1863612
+          - 1863605
+          - 1863590
+          - 1863589
+          - 1863588
+        campaigns:
+        adversaries:
+        documents:
+        emails:
+        signatures:
+        threats:
+      sandbox: true
+      interval: 3600
+      # age out of indicators
+      age_out:
+        sudden_death: true
+        interval: 3600
+        default: null
       # flag indicators with share level green
       attributes:
         share_level: green

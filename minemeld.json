@@ -6,7 +6,8 @@
   "description": "Miner for ThreatConnect Platform",
   "entry_points": {
     "minemeld_nodes": {
-      "threatconnect.Miner": "threatconnect.node:Miner"
+      "threatconnect.IndicatorsMiner": "threatconnect.node:IndicatorsMiner",
+      "threatconnect.GroupsMiner": "threatconnect.node:GroupsMiner"
     },
     "minemeld_prototypes": {
       "threatconnect.prototypes": "threatconnect:prototypes"
