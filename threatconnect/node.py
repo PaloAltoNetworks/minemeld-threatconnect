@@ -245,11 +245,14 @@ class TCMiner(BasePollerFT):
             LOG.error('%s - Error loading side config: %s', self.name, str(e))
             return
 
-        self.tc.api_key = sconfig.get('apikey', None)
-        self.tc.api_secret = sconfig.get('apisecret', None)
+        self.tc = None
         data_owner = sconfig.get('owner', None)
         if data_owner is not None:
             self.tc.owner = quote(data_owner)
+        side_api_key = sconfig.get('apikey', self.api_key)
+        side_api_secret = sconfig.get('apisecret', self.api_secret)
+        if not (None in [side_api_key, side_api_secret]):
+            self.tc = ThreatConnect(side_api_secret, side_api_key, self.api_url, self.api_base_uri, self.owner)
 
     def _saved_state_restore(self, saved_state):
         super(TCMiner, self)._saved_state_restore(saved_state)
