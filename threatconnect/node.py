@@ -159,7 +159,7 @@ class ThreatConnect(object):
             response = requests.get(final_url, auth=self)
             doc = response.json()
             if doc["status"] != "Success":
-                raise RuntimeError("ThreatConnectAPI - {}".format(response.get("message", "unknown error")))
+                raise RuntimeError("ThreatConnectAPI - {}".format(doc.get("message", "unknown error")))
             return doc
 
         r_data = do_call(0)
